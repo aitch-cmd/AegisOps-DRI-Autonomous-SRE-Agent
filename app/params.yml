@@ -1,0 +1,14 @@
+retrieve_runbook:
+    top_k: 4
+    similarity_threshold: 0.75
+    categories: ["runbooks", "architecture", "postmortems", "policies"]
+
+retrieve_similar_incidents:
+    top_k: 3
+    similarity_threshold: 0.70
+
+retrieve_policy:
+    level_rank: {"L0": 0, "L1": 1, "L2": 2, "L3": 3}  
+
+save_incident_memory:
+    read_tools: ["retrieve_similar_incidents", "retrieve_runbook", "retrieve_policy"]

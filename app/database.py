@@ -17,8 +17,19 @@ AsyncSessionLocal = async_sessionmaker(
 Base = declarative_base()
 
 
+import contextlib
+
 async def get_db():
     """Async database session dependency for FastAPI"""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+@contextlib.asynccontextmanager
+async def get_db_session():
+    """Async database session context manager wrapper"""
     async with AsyncSessionLocal() as session:
         try:
             yield session
