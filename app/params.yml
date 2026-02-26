@@ -12,3 +12,13 @@ retrieve_policy:
 
 save_incident_memory:
     read_tools: ["retrieve_similar_incidents", "retrieve_runbook", "retrieve_policy"]
+
+restart_deployment:
+    health_error_rate_threshold: 0.05
+    rollout_poll_interval_s: 5
+    rollout_timeout_s: 120
+
+scale_service:
+  max_scale_delta: 2
+  max_absolute_replicas: 10
+
