@@ -22,3 +22,6 @@ scale_service:
   max_scale_delta: 2
   max_absolute_replicas: 10
 
+agent:
+  max_iterations: 10
+
