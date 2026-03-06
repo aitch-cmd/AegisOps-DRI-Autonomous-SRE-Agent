@@ -49,7 +49,7 @@ def _should_continue(state: AegisOpsState) -> str:
 # ── Build graph ────────────────────────────────────────────────────────────
 
 def build_graph():
-    """Construct and compile the AegisOps ReAct agent graph."""
+    """Construct and return the AegisOps ReAct agent graph builder."""
 
     tools_node = ToolNode(ALL_TOOLS)
 
@@ -75,14 +75,17 @@ def build_graph():
     graph.add_edge("tools", "agent_node")
     graph.add_edge("resolution_node", END)
 
-    return graph.compile()
+    return graph
 
 
-# Compiled graph singleton
-app = build_graph()
+# Graph builder singleton
+graph_builder = build_graph()
 
 
 # ── Entry point ────────────────────────────────────────────────────────────
+
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from app.core.settings import settings
 
 async def run_agent(incident: IncidentEvent) -> dict:
     """
@@ -130,5 +133,17 @@ async def run_agent(incident: IncidentEvent) -> dict:
         "error": None,
     }
 
-    result = await app.ainvoke(initial_state)
-    return result
+    # Format SQLAlchemy async URL driver to psycopg standard driver for langgraph-checkpoint-postgres
+    # e.g. postgresql+asyncpg://... -> postgresql://...
+    db_uri = settings.DATABASE_URL
+    if db_uri.startswith("postgresql+asyncpg://"):
+        db_uri = db_uri.replace("postgresql+asyncpg://", "postgresql://", 1)
+        
+    async with AsyncPostgresSaver.from_conn_string(db_uri) as checkpointer:
+        # Compile graph dynamically with the active checkpointer
+        app = graph_builder.compile(checkpointer=checkpointer)
+        
+        config = {"configurable": {"thread_id": incident["incident_id"]}}
+        
+        result = await app.ainvoke(initial_state, config=config)
+        return result

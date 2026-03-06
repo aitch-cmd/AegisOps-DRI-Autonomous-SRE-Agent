@@ -7,12 +7,33 @@ from pydantic import BaseModel
 
 from app.react.graph import run_agent
 from app.react.states import IncidentEvent
+from app.routers.slack import router as slack_router
+
+from contextlib import asynccontextmanager
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from app.core.settings import settings
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Setup database schema for checkpointer if it doesn't exist
+    db_uri = settings.DATABASE_URL
+    if db_uri.startswith("postgresql+asyncpg://"):
+        db_uri = db_uri.replace("postgresql+asyncpg://", "postgresql://", 1)
+        
+    async with AsyncPostgresSaver.from_conn_string(db_uri) as checkpointer:
+        print("Setting up checkpointer schema in Postgres...")
+        await checkpointer.setup()
+        print("Checkpointer schema setup complete.")
+    yield
 
 app = FastAPI(
     title="AegisOps Agent API",
     description="Webhook receiver for triggering the AegisOps ReAct agent.",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan,
 )
+
+app.include_router(slack_router)
 
 # Pydantic model for incoming webhook payloads
 class IncidentWebhookPayload(BaseModel):
