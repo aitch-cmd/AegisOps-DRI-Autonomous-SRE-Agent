@@ -87,10 +87,10 @@ def get_metrics(service_name: str, lookback_minutes: int = 5) -> Dict[str, Union
 
         except requests.exceptions.Timeout:
             logger.error(f"Timeout querying {metric_name} for {service_name}")
-            results[metric_name] = "Error: Prometheus query timed out"
+            results[metric_name] = f"WARNING: Prometheus query timed out. The metrics server might be down. Attempt to use get_logs or check_service_health instead."
         except Exception as e:
             logger.error(f"Error querying {metric_name} for {service_name}: {e}")
-            results[metric_name] = f"Error: {str(e)}"
+            results[metric_name] = f"WARNING: Failed to query {metric_name}. Error: {str(e)}. Use alternative diagnostic tools."
 
     logger.info(f"Metrics retrieval completed for {service_name}: {results}")
     return results

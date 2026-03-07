@@ -73,7 +73,7 @@ def get_logs(
             "top_errors": [],
             "total_error_lines": 0,
             "query_duration_ms": None,
-            "errors": [str(e)],
+            "errors": [f"WARNING: Failed to connect to Loki API. Error: {str(e)}. Attempt to use get_metrics or get_pod_status instead."],
         }
 
     query_duration_ms = (time.monotonic() - query_start) * 1000
