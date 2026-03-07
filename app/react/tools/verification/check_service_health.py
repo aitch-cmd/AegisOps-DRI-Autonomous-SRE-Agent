@@ -15,7 +15,15 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-config.load_incluster_config()
+import os
+
+try:
+    if os.getenv("KUBERNETES_SERVICE_HOST"):
+        config.load_incluster_config()
+    else:
+        config.load_kube_config()
+except Exception as e:
+    logger.error(f"Failed to load Kubernetes config: {e}")
 
 
 @tool
@@ -38,11 +46,14 @@ def check_service_health(
         Dict with pod readiness summary, current error rate, and healthy flag.
     """
     # ── Pod readiness ──────────────────────────────────────────────────
-    v1 = client.CoreV1Api()
-    pods = v1.list_namespaced_pod(
-        namespace=namespace,
-        label_selector=f"app={deployment}",
-    )
+    try:
+        v1 = client.CoreV1Api()
+        pods = v1.list_namespaced_pod(
+            namespace=namespace,
+            label_selector=f"app={deployment}",
+        )
+    except Exception as e:
+        return {"error": f"WARNING: Failed to connect to Kubernetes API. Error: {str(e)}."}
 
     total, ready = 0, 0
     for pod in pods.items:

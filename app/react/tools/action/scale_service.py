@@ -13,16 +13,12 @@ from kubernetes_asyncio import client, config
 from kubernetes_asyncio.client import ApiException
 from langchain_core.tools import tool
 
-from app.states import ToolInvocation, PolicyDecision
-from tools.retrieve_policy import retrieve_policy
+from app.react.states import ToolInvocation, PolicyDecision
+from app.react.tools.memory.retrieve_policy import retrieve_policy
 
+from app.utils.load_params import load_params
 
-def _load_params() -> dict:
-    path = Path(__file__).parents[1] / "app" / "params.yml"
-    return yaml.safe_load(path.read_text())
-
-
-_PARAMS    = _load_params()["scale_service"]
+_PARAMS    = load_params("app/params.yml")["scale_service"]
 _MAX_DELTA = _PARAMS["max_scale_delta"]        # max replicas change in one action
 _MAX_ABS   = _PARAMS["max_absolute_replicas"]  # hard ceiling
 

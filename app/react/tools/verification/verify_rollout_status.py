@@ -8,7 +8,15 @@ from typing import Dict, Any
 from kubernetes import client, config
 from langchain_core.tools import tool
 
-config.load_incluster_config()
+import os
+
+try:
+    if os.getenv("KUBERNETES_SERVICE_HOST"):
+        config.load_incluster_config()
+    else:
+        config.load_kube_config()
+except Exception as e:
+    print(f"Failed to load Kubernetes config: {e}")
 
 
 @tool
@@ -27,8 +35,11 @@ def verify_rollout_status(
         Dict with rollout status (Running / Progressing / Failed),
         replicas summary, and condition details.
     """
-    apps_v1 = client.AppsV1Api()
-    dep = apps_v1.read_namespaced_deployment(name=deployment, namespace=namespace)
+    try:
+        apps_v1 = client.AppsV1Api()
+        dep = apps_v1.read_namespaced_deployment(name=deployment, namespace=namespace)
+    except Exception as e:
+        return {"error": f"WARNING: Failed to connect to Kubernetes API. Error: {str(e)}."}
 
     status = dep.status
     spec_replicas = dep.spec.replicas or 1

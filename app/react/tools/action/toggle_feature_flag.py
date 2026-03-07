@@ -12,10 +12,10 @@ from typing import Literal
 import httpx
 from langchain_core.tools import tool
 
-from app.states import ToolInvocation, PolicyDecision
-from tools.retrieve_policy import retrieve_policy
+from app.react.states import ToolInvocation, PolicyDecision
+from app.react.tools.memory.retrieve_policy import retrieve_policy
 
-_FLAG_SERVICE_URL   = os.environ["FEATURE_FLAG_SERVICE_URL"]
+_FLAG_SERVICE_URL   = os.environ.get("FEATURE_FLAG_SERVICE_URL", "")
 _FLAG_SERVICE_TOKEN = os.environ.get("FEATURE_FLAG_SERVICE_TOKEN", "")
 
 
