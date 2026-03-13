@@ -121,7 +121,7 @@ async def resolution_node(state: AegisOpsState) -> dict:
 
     # Slack notification
     await send_slack_notification.ainvoke({
-        "channel": "#incidents",
+        "channel": "#notification",
         "message": (
             f"✅ *Incident Resolved*\n"
             f"*ID:* `{incident['incident_id']}`\n"

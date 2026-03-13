@@ -37,6 +37,48 @@ def get_logs(
     Fetch logs from Loki and return top error patterns instead of raw lines.
     """
 
+    # ==========================================
+    # MOCK DATA FOR PORTFOLIO DEMO
+    # ==========================================
+    logger.info(f"Using MOCK logs for: {service_name}")
+    
+    if service_name == "frontend":
+        top_errors = [
+            {"pattern": "level=error msg=\"Node server crashed with OOM\"", "count": 42},
+            {"pattern": "level=error msg=\"Failed to fetch data from /api/checkout api timeout\"", "count": 15},
+            {"pattern": "level=error msg=\"Unhandled promise rejection in ClientRouter\"", "count": 5}
+        ]
+        total_error_lines = 150
+    elif service_name == "checkout-service":
+        top_errors = [
+            {"pattern": "FATAL - Connection to database timed out after 30000ms", "count": 210},
+            {"pattern": "ERROR - Payment gateway stripe returned 503 Service Unavailable", "count": 45},
+            {"pattern": "WARN - Queue size reached maximum capacity", "count": 12}
+        ]
+        total_error_lines = 300
+    elif service_name == "auth-service":
+        top_errors = [
+            {"pattern": "ERROR - Invalid JWT signature detected from IP", "count": 8},
+            {"pattern": "WARN - Rate limit exceeded for user login attempts", "count": 3}
+        ]
+        total_error_lines = 25
+    else:
+        top_errors = [
+            {"pattern": f"ERROR - Unexpected generic fault in {service_name}", "count": 5}
+        ]
+        total_error_lines = 12
+
+    time.sleep(1) # Simulate network delay visually
+
+    return {
+        "top_errors": top_errors,
+        "total_error_lines": total_error_lines,
+        "query_duration_ms": 145.2,
+        "errors": [],
+    }
+    
+    """
+    # ORIGINAL LOKI IMPLEMENTATION (Commented out for demo)
     base_url = settings.LOKI_URL
 
     now_ns = int(time.time() * 1e9)
@@ -116,3 +158,4 @@ def get_logs(
         "query_duration_ms": round(query_duration_ms, 2),
         "errors": [],
     }
+    """

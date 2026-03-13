@@ -21,6 +21,46 @@ def get_metrics(service_name: str, lookback_minutes: int = 5) -> Dict[str, Union
     Returns:
         A dictionary containing aggregated service-level metrics.
     """
+    # ==========================================
+    # MOCK DATA FOR PORTFOLIO DEMO
+    # ==========================================
+    logger.info(f"Using MOCK metrics for: {service_name}")
+    
+    if service_name == "frontend":
+        results = {
+            "cpu_usage": 0.98,          # 98% CPU usage
+            "memory_usage": 512000000,  # 512MB RAM
+            "error_rate": 0.15,         # 15% error rate
+            "latency_p99": 2.5          # 2.5s p99 latency
+        }
+    elif service_name == "checkout-service":
+        results = {
+            "cpu_usage": 0.45,
+            "memory_usage": 1024000000, # 1GB RAM
+            "error_rate": 0.85,         # 85% error rate!
+            "latency_p99": 5.0          # 5s latency
+        }
+    elif service_name == "auth-service":
+        results = {
+            "cpu_usage": 0.10,
+            "memory_usage": 256000000,
+            "error_rate": 0.01,
+            "latency_p99": 0.05
+        }
+    else:
+        # Default mock metrics for any other service
+        results = {
+            "cpu_usage": 0.30,
+            "memory_usage": 512000000,
+            "error_rate": 0.02,
+            "latency_p99": 0.1
+        }
+
+    logger.info(f"Metrics retrieval completed for {service_name}: {results}")
+    return results
+
+    """
+    # ORIGINAL PROMETHEUS IMPLEMENTATION 
     base_url = settings.PROMETHEUS_URL
     duration = f"{lookback_minutes}m"
 
@@ -94,3 +134,4 @@ def get_metrics(service_name: str, lookback_minutes: int = 5) -> Dict[str, Union
 
     logger.info(f"Metrics retrieval completed for {service_name}: {results}")
     return results
+    """
