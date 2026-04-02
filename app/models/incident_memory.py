@@ -18,5 +18,5 @@ class IncidentMemory(Base):
     actions_taken: Mapped[list[str]] = mapped_column(ARRAY(Text))
     outcome: Mapped[str] = mapped_column(String(64))
     mttr_seconds: Mapped[int] = mapped_column(Integer)
-    embedding: Mapped[list[float]] = mapped_column(Vector(1536))
+    embedding: Mapped[list[float]] = mapped_column(Vector(768))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

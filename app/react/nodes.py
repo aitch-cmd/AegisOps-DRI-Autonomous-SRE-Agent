@@ -37,10 +37,11 @@ async def memory_node(state: AegisOpsState) -> dict:
 
     incident = state["incident"]
 
-    # Episodic: retrieve similar past incidents via pgvector
-    similar = await retrieve_similar_incidents.ainvoke(
-        {"symptoms": incident["symptoms"]}
-    )
+    # Episodic: retrieve similar past incidents via pgvector (Disabled for Portfolio Demo)
+    # similar = await retrieve_similar_incidents.ainvoke(
+    #     {"symptoms": incident["symptoms"]}
+    # )
+    similar = []
 
     # Procedural: load broad policies for this service
     service = incident["service"]
@@ -102,7 +103,7 @@ async def resolution_node(state: AegisOpsState) -> dict:
     last_msg = state["messages"][-1]
     summary = getattr(last_msg, "content", "Incident resolved by AegisOps agent.")
 
-    # Persist to episodic memory for future RAG
+    # Persist to episodic memory for future RAG (Disabled for Portfolio Demo)
     diagnosis = state.get("diagnosis") or {
         "root_cause_hypothesis": summary,
         "confidence_score": 0.0,
@@ -110,14 +111,14 @@ async def resolution_node(state: AegisOpsState) -> dict:
         "recommended_actions": [],
     }
 
-    await save_incident_memory.ainvoke({
-        "incident_id": incident["incident_id"],
-        "symptoms": incident["symptoms"],
-        "diagnosis": diagnosis,
-        "tool_invocations": state.get("tool_invocations", []),
-        "outcome": "resolved",
-        "mttr_seconds": mttr,
-    })
+    # await save_incident_memory.ainvoke({
+    #     "incident_id": incident["incident_id"],
+    #     "symptoms": incident["symptoms"],
+    #     "diagnosis": diagnosis,
+    #     "tool_invocations": state.get("tool_invocations", []),
+    #     "outcome": "resolved",
+    #     "mttr_seconds": mttr,
+    # })
 
     # Slack notification
     await send_slack_notification.ainvoke({

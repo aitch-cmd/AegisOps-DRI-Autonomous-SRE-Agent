@@ -37,7 +37,7 @@ app.include_router(slack_router)
 
 # Pydantic model for incoming webhook payloads
 class IncidentWebhookPayload(BaseModel):
-    source: Literal["pagerduty", "prometheus", "mock"]
+    source: Literal["webhook", "prometheus", "mock"]
     severity: Literal["critical", "high", "medium", "low"]
     service: str
     symptoms: List[str]
@@ -59,7 +59,7 @@ async def process_incident_background(incident: IncidentEvent):
 @app.post("/webhook/incident", status_code=202)
 async def receive_incident(payload: IncidentWebhookPayload, background_tasks: BackgroundTasks):
     """
-    Receive an incident alert from a monitoring system (e.g., PagerDuty, Prometheus)
+    Receive an incident alert from a monitoring system (e.g., Prometheus) or manual webhook
     and kick off the AegisOps agent investigation in the background.
     """
     incident_id = str(uuid.uuid4())

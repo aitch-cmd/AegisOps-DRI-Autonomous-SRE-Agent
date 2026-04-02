@@ -3,7 +3,6 @@ import re
 from typing import Any, Dict, List, Optional
 from collections import Counter
 
-import requests
 from langchain_core.tools import tool
 
 from app.core.logging import get_logger
@@ -34,7 +33,8 @@ def get_logs(
     log_level: Optional[str] = "error",
 ) -> Dict[str, Any]:
     """
-    Fetch logs from Loki and return top error patterns instead of raw lines.
+    Fetch logs from journalctl / plain log files and return top error patterns.
+    Falls back to mock data when running outside a live host.
     """
 
     # ==========================================
@@ -68,7 +68,7 @@ def get_logs(
         ]
         total_error_lines = 12
 
-    time.sleep(1) # Simulate network delay visually
+    time.sleep(1)  # Simulate latency
 
     return {
         "top_errors": top_errors,
@@ -76,86 +76,57 @@ def get_logs(
         "query_duration_ms": 145.2,
         "errors": [],
     }
-    
-    """
-    # ORIGINAL LOKI IMPLEMENTATION (Commented out for demo)
-    base_url = settings.LOKI_URL
 
-    now_ns = int(time.time() * 1e9)
-    start_ns = now_ns - int(lookback_minutes * 60 * 1e9)
-
-    if log_level:
-        logql = f'{{app="{service_name}"}} |= "{log_level.upper()}"'
-    else:
-        logql = f'{{app="{service_name}"}}'
-
-    params = {
-        "query": logql,
-        "start": str(start_ns),
-        "end": str(now_ns),
-        "limit": "500",
-        "direction": "backward",
-    }
-
-    query_start = time.monotonic()
-
-    try:
-        response = requests.get(
-            f"{base_url}/loki/api/v1/query_range",
-            params=params,
-            timeout=5,
-            headers={"X-Scope-OrgID": settings.LOKI_TENANT_ID}
-            if settings.LOKI_TENANT_ID else {},
-        )
-        response.raise_for_status()
-
-    except Exception as e:
-        logger.error("Loki query failed", extra={"error": str(e)})
-        return {
-            "top_errors": [],
-            "total_error_lines": 0,
-            "query_duration_ms": None,
-            "errors": [f"WARNING: Failed to connect to Loki API. Error: {str(e)}. Attempt to use get_metrics or get_pod_status instead."],
-        }
-
-    query_duration_ms = (time.monotonic() - query_start) * 1000
-
-    try:
-        data = response.json()
-        streams = data.get("data", {}).get("result", [])
-    except Exception as e:
-        return {
-            "top_errors": [],
-            "total_error_lines": 0,
-            "query_duration_ms": round(query_duration_ms, 2),
-            "errors": [f"JSON parse error: {str(e)}"],
-        }
-
-    messages: List[str] = []
-
-    for stream in streams:
-        values = stream.get("values", [])
-        for entry in values:
-            try:
-                raw_line = entry[1]
-                norm = normalize_message(raw_line)
-                if norm:
-                    messages.append(norm)
-            except (IndexError, ValueError):
-                continue
-
-    counter = Counter(messages)
-    most_common = counter.most_common(top_k)
-
-    top_errors = [
-        {"pattern": pattern, "count": count}
-        for pattern, count in most_common
-    ]
-
-    return {
-        "top_errors": top_errors,
-        "total_error_lines": len(messages),
-        "query_duration_ms": round(query_duration_ms, 2),
-        "errors": [],
-    }
-    """
+    # ──────────────────────────────────────────
+    # PRODUCTION: journalctl / plain log files
+    # ──────────────────────────────────────────
+    # import subprocess, pathlib
+    #
+    # log_file = pathlib.Path(f"/var/log/{service_name}/{service_name}.log")
+    #
+    # query_start = time.monotonic()
+    #
+    # try:
+    #     if log_file.exists():
+    #         # Read from plain log file
+    #         lines = log_file.read_text().splitlines()[-500:]
+    #     else:
+    #         # Fall back to journalctl
+    #         result = subprocess.run(
+    #             ["journalctl", "-u", service_name,
+    #              f"--since={lookback_minutes} min ago",
+    #              "--no-pager", "-q"],
+    #             capture_output=True, text=True, timeout=10,
+    #         )
+    #         lines = result.stdout.splitlines()[-500:]
+    #
+    # except Exception as e:
+    #     logger.error("Log fetch failed", extra={"error": str(e)})
+    #     return {
+    #         "top_errors": [],
+    #         "total_error_lines": 0,
+    #         "query_duration_ms": None,
+    #         "errors": [f"WARNING: Failed to fetch logs. Error: {str(e)}. Try get_metrics or get_pod_status instead."],
+    #     }
+    #
+    # query_duration_ms = (time.monotonic() - query_start) * 1000
+    #
+    # if log_level:
+    #     lines = [l for l in lines if log_level.upper() in l.upper()]
+    #
+    # messages = [normalize_message(l) for l in lines if normalize_message(l)]
+    #
+    # counter = Counter(messages)
+    # most_common = counter.most_common(top_k)
+    #
+    # top_errors = [
+    #     {"pattern": pattern, "count": count}
+    #     for pattern, count in most_common
+    # ]
+    #
+    # return {
+    #     "top_errors": top_errors,
+    #     "total_error_lines": len(messages),
+    #     "query_duration_ms": round(query_duration_ms, 2),
+    #     "errors": [],
+    # }

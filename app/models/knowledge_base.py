@@ -10,4 +10,4 @@ class KnowledgeBase(Base):
     category: Mapped[str] = mapped_column(String(64), index=True)   # runbooks | architecture | postmortems | policies
     doc_name: Mapped[str] = mapped_column(String(256))
     chunk_text: Mapped[str] = mapped_column(Text)
-    embedding: Mapped[list[float]] = mapped_column(Vector(1536))
+    embedding: Mapped[list[float]] = mapped_column(Vector(768))

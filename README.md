@@ -9,11 +9,11 @@ AegisOps is an autonomous Site Reliability Engineering (SRE) agent designed to i
   - *Episodic Memory:* Pre-loads historical RAG context via `pgvector` to remember how similar past incidents were solved.
   - *Semantic Memory:* On-demand vectorized retrieval of internal runbooks and docs.
   - *Procedural Memory:* Strict operational policies gating destructive actions based on autonomy levels.
-- **Graceful Diagnostic Fallbacks:** Intelligent tooling that knows to switch from Prometheus to Loki, or from in-cluster Kubernetes APIs to local `kubeconfig` fallback if primary services fail.
+- **Graceful Diagnostic Fallbacks:** Intelligent tooling that knows to switch from Prometheus to `journalctl` / plain log files, or from in-cluster Kubernetes APIs to local `kubeconfig` fallback if primary services fail.
 - **Human-in-the-Loop Muting:** Slack interactive endpoints (`/slack/actions`) allow SREs to `Approve` or `Deny` high-risk agent commands (e.g. `restart_deployment`) before they execute.
 
 ## 🏗️ Architecture Flow
-1. **Trigger:** Monitoring tools (PagerDuty/Prometheus) or SREs (via Slack `@AegisOps`) hit the FastAPI webhook endpoints.
+1. **Trigger:** Prometheus alerts or SREs (via Slack `@AegisOps` / manual FastAPI webhook) hit the webhook endpoints.
 2. **Pre-loading:** The LangGraph `memory_node` fetches relevant rules and similar past outages.
 3. **Reasoning:** The `agent_node` forms a hypothesis and executes diagnostic tools (fetch metrics, logs, pod statuses).
 4. **Action:** The agent executes mutated actions (scaling, rollbacks, restarts) gated by policy checkers.
