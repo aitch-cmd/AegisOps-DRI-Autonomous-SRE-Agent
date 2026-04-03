@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage
 
 class IncidentEvent(TypedDict):
     incident_id: str
-    source: Literal["webhook", "prometheus", "mock"]
+    source: Literal["webhook", "prometheus", "slack"]
     severity: Literal["critical", "high", "medium", "low"]
     service: str
     symptoms: List[str]

@@ -37,7 +37,7 @@ app.include_router(slack_router)
 
 # Pydantic model for incoming webhook payloads
 class IncidentWebhookPayload(BaseModel):
-    source: Literal["webhook", "prometheus", "mock"]
+    source: Literal["webhook", "prometheus", "slack"]
     severity: Literal["critical", "high", "medium", "low"]
     service: str
     symptoms: List[str]

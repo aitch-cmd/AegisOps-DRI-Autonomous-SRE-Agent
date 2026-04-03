@@ -1,7 +1,7 @@
 [project]
 name = "aegisops"
 version = "0.1.0"
-description = "Add your description here"
+description = "Autonomous SRE agent that diagnoses and resolves production incidents using LangGraph ReAct architecture."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

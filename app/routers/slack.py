@@ -116,7 +116,7 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
 
             incident: IncidentEvent = {
                 "incident_id": incident_id,
-                "source": "mock",  # Slack-triggered incidents use mock source
+                "source": "slack",
                 "severity": parsed["severity"],
                 "service": parsed["service"],
                 "symptoms": parsed["symptoms"],

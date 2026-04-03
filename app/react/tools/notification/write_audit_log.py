@@ -1,8 +1,3 @@
-"""
-Notification Tool — write_audit_log
-Append tool call, params, result, and policy decision to permanent audit trail.
-"""
-
 import json
 from datetime import datetime, timezone
 

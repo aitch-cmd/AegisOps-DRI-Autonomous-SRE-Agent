@@ -1,12 +1,13 @@
 import time
 import re
+import subprocess
+import pathlib
 from typing import Any, Dict, List, Optional
 from collections import Counter
 
 from langchain_core.tools import tool
 
 from app.core.logging import get_logger
-from app.core.settings import settings
 
 logger = get_logger(__name__)
 
@@ -33,100 +34,70 @@ def get_logs(
     log_level: Optional[str] = "error",
 ) -> Dict[str, Any]:
     """
-    Fetch logs from journalctl / plain log files and return top error patterns.
-    Falls back to mock data when running outside a live host.
+    Fetch logs from journalctl or plain log files and return top error patterns.
+    Tries journalctl first (systemd hosts), then falls back to
+    /var/log/<service>/<service>.log for containerised or file-based setups.
     """
 
-    # ==========================================
-    # MOCK DATA FOR PORTFOLIO DEMO
-    # ==========================================
-    logger.info(f"Using MOCK logs for: {service_name}")
-    
-    if service_name == "frontend":
-        top_errors = [
-            {"pattern": "level=error msg=\"Node server crashed with OOM\"", "count": 42},
-            {"pattern": "level=error msg=\"Failed to fetch data from /api/checkout api timeout\"", "count": 15},
-            {"pattern": "level=error msg=\"Unhandled promise rejection in ClientRouter\"", "count": 5}
-        ]
-        total_error_lines = 150
-    elif service_name == "checkout-service":
-        top_errors = [
-            {"pattern": "FATAL - Connection to database timed out after 30000ms", "count": 210},
-            {"pattern": "ERROR - Payment gateway stripe returned 503 Service Unavailable", "count": 45},
-            {"pattern": "WARN - Queue size reached maximum capacity", "count": 12}
-        ]
-        total_error_lines = 300
-    elif service_name == "auth-service":
-        top_errors = [
-            {"pattern": "ERROR - Invalid JWT signature detected from IP", "count": 8},
-            {"pattern": "WARN - Rate limit exceeded for user login attempts", "count": 3}
-        ]
-        total_error_lines = 25
-    else:
-        top_errors = [
-            {"pattern": f"ERROR - Unexpected generic fault in {service_name}", "count": 5}
-        ]
-        total_error_lines = 12
+    lines: List[str] = []
+    source = "none"
 
-    time.sleep(1)  # Simulate latency
+    # ── Strategy 1: journalctl (systemd) ──────────────────────────────────
+    try:
+        cmd = [
+            "journalctl", "-u", service_name,
+            "--since", f"{lookback_minutes} min ago",
+            "--no-pager", "-q",
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode == 0 and result.stdout.strip():
+            lines = result.stdout.strip().splitlines()
+            source = "journalctl"
+            logger.info("Fetched %d lines via journalctl for %s", len(lines), service_name)
+    except FileNotFoundError:
+        logger.info("journalctl not available, falling back to log file")
+    except subprocess.TimeoutExpired:
+        logger.warning("journalctl timed out for %s", service_name)
+
+    # ── Strategy 2: Plain log file ────────────────────────────────────────
+    if not lines:
+        log_file = pathlib.Path(f"/var/log/{service_name}/{service_name}.log")
+        if log_file.exists():
+            lines = log_file.read_text().splitlines()[-500:]
+            source = "logfile"
+            logger.info("Fetched %d lines from %s", len(lines), log_file)
+        else:
+            logger.warning("No log source found for %s", service_name)
+            return {
+                "top_errors": [],
+                "total_error_lines": 0,
+                "query_duration_ms": 0,
+                "errors": [f"No log source available for '{service_name}'. "
+                           "Tried journalctl and /var/log/."],
+            }
+
+    # ── Filter by level ───────────────────────────────────────────────────
+    query_start = time.monotonic()
+
+    if log_level:
+        lines = [l for l in lines if log_level.upper() in l.upper()]
+
+    # ── Normalize and count top patterns ──────────────────────────────────
+    messages = [normalize_message(l) for l in lines if normalize_message(l)]
+    counter = Counter(messages)
+    most_common = counter.most_common(top_k)
+
+    top_errors = [
+        {"pattern": pattern, "count": count}
+        for pattern, count in most_common
+    ]
+
+    query_duration_ms = (time.monotonic() - query_start) * 1000
 
     return {
         "top_errors": top_errors,
-        "total_error_lines": total_error_lines,
-        "query_duration_ms": 145.2,
+        "total_error_lines": len(messages),
+        "query_duration_ms": round(query_duration_ms, 2),
+        "source": source,
         "errors": [],
     }
-
-    # ──────────────────────────────────────────
-    # PRODUCTION: journalctl / plain log files
-    # ──────────────────────────────────────────
-    # import subprocess, pathlib
-    #
-    # log_file = pathlib.Path(f"/var/log/{service_name}/{service_name}.log")
-    #
-    # query_start = time.monotonic()
-    #
-    # try:
-    #     if log_file.exists():
-    #         # Read from plain log file
-    #         lines = log_file.read_text().splitlines()[-500:]
-    #     else:
-    #         # Fall back to journalctl
-    #         result = subprocess.run(
-    #             ["journalctl", "-u", service_name,
-    #              f"--since={lookback_minutes} min ago",
-    #              "--no-pager", "-q"],
-    #             capture_output=True, text=True, timeout=10,
-    #         )
-    #         lines = result.stdout.splitlines()[-500:]
-    #
-    # except Exception as e:
-    #     logger.error("Log fetch failed", extra={"error": str(e)})
-    #     return {
-    #         "top_errors": [],
-    #         "total_error_lines": 0,
-    #         "query_duration_ms": None,
-    #         "errors": [f"WARNING: Failed to fetch logs. Error: {str(e)}. Try get_metrics or get_pod_status instead."],
-    #     }
-    #
-    # query_duration_ms = (time.monotonic() - query_start) * 1000
-    #
-    # if log_level:
-    #     lines = [l for l in lines if log_level.upper() in l.upper()]
-    #
-    # messages = [normalize_message(l) for l in lines if normalize_message(l)]
-    #
-    # counter = Counter(messages)
-    # most_common = counter.most_common(top_k)
-    #
-    # top_errors = [
-    #     {"pattern": pattern, "count": count}
-    #     for pattern, count in most_common
-    # ]
-    #
-    # return {
-    #     "top_errors": top_errors,
-    #     "total_error_lines": len(messages),
-    #     "query_duration_ms": round(query_duration_ms, 2),
-    #     "errors": [],
-    # }
