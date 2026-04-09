@@ -1,6 +1,5 @@
 .env
 logs/
-uv.lock
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

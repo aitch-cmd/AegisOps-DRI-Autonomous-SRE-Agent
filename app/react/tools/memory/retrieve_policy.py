@@ -1,38 +1,22 @@
-import os
 from typing import Optional
 
-import redis.asyncio as aioredis
 from langchain_core.tools import tool
-from sqlalchemy import and_, or_, select
 
-from app.database import get_db_session
 from app.react.states import PolicyDecision
-from app.models.policies import Policy
 from app.utils.load_params import load_params
 
 params = load_params("app/params.yml")
-_LEVEL_RANK = params["retrieve_policy"]["level_rank"]   
-_redis: Optional[aioredis.Redis] = None
+_LEVEL_RANK = params["retrieve_policy"]["level_rank"]
+_POLICIES = params["retrieve_policy"].get("policies", [])
 
 
-def _get_redis() -> aioredis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = aioredis.from_url(os.environ["REDIS_URL"], decode_responses=True)
-    return _redis
-
-
-def _cache_key(action: str, service: str, severity: str) -> str:
-    return f"policy:{action}:{service}:{severity}"
-
-
-def _evaluate(policy: Policy, autonomy_level: str) -> PolicyDecision:
-    allowed = _LEVEL_RANK.get(autonomy_level, 0) >= _LEVEL_RANK.get(policy.min_autonomy_level, 3)
-    requires_approval = policy.requires_approval and autonomy_level == "L3"
+def _evaluate(policy: dict, autonomy_level: str) -> PolicyDecision:
+    allowed = _LEVEL_RANK.get(autonomy_level, 0) >= _LEVEL_RANK.get(policy.get("min_autonomy_level", "L3"), 3)
+    requires_approval = policy.get("requires_approval", True) and autonomy_level == "L3"
     return PolicyDecision(
-        action=policy.action,
+        action=policy.get("action", "unknown"),
         allowed=allowed,
-        reason=policy.reason,
+        reason=policy.get("reason", ""),
         autonomy_level=autonomy_level,  # type: ignore[arg-type]
         requires_approval=requires_approval,
     )
@@ -57,8 +41,8 @@ async def retrieve_policy(
 ) -> PolicyDecision:
     """
     Retrieve the policy decision for a proposed mutating action.
-    Checks Redis cache first (1h TTL), falls back to Postgres ORM lookup.
-    Specific service/severity rows take precedence over wildcard '*' rows.
+    Evaluates against the local params.yml configuration.
+    Specific service/severity matching takes precedence over wildcards.
 
     Args:
         action:         Tool name, e.g. 'restart_deployment'.
@@ -69,43 +53,37 @@ async def retrieve_policy(
     Returns:
         PolicyDecision with allowed, reason, autonomy_level, requires_approval.
     """
-    cache_key = _cache_key(action, service, severity)
-    redis = _get_redis()
+    best_match = None
+    best_score = -1
 
-    # ── Cache hit ──────────────────────────────────────────────────────────
-    cached = await redis.hgetall(cache_key)
-    if cached:
-        policy = Policy(**{k: v for k, v in cached.items()})
-        return _evaluate(policy, autonomy_level)
+    for p in _POLICIES:
+        p_act = p.get("action")
+        p_srv = p.get("service")
+        p_sev = p.get("severity")
 
-    # ── ORM lookup — specific rows ranked above wildcards ─────────────────
-    stmt = (
-        select(Policy)
-        .where(Policy.action == action)
-        .where(or_(Policy.service == service, Policy.service == "*"))
-        .where(or_(Policy.severity == severity, Policy.severity == "*"))
-        .order_by(
-            (Policy.service == service).desc(),
-            (Policy.severity == severity).desc(),
-        )
-        .limit(1)
-    )
+        # Action must match exactly or be wildcard
+        if p_act != action and p_act != "*":
+            continue
 
-    async with get_db_session() as db:
-        policy = (await db.execute(stmt)).scalar_one_or_none()
+        # Service must match exactly or be wildcard
+        if p_srv != service and p_srv != "*":
+            continue
 
-    if policy is None:
+        # Severity must match exactly or be wildcard
+        if p_sev != severity and p_sev != "*":
+            continue
+
+        # Calculate score: specific matches are better than wildcards
+        score = 0
+        if p_act == action: score += 4
+        if p_srv == service: score += 2
+        if p_sev == severity: score += 1
+
+        if score > best_score:
+            best_score = score
+            best_match = p
+
+    if best_match is None:
         return _default_deny(action, autonomy_level)
 
-    # ── Cache the raw policy fields (not the decision — level may differ) ─
-    await redis.hset(cache_key, mapping={
-        "action": policy.action,
-        "service": policy.service,
-        "severity": policy.severity,
-        "min_autonomy_level": policy.min_autonomy_level,
-        "requires_approval": str(policy.requires_approval),
-        "reason": policy.reason,
-    })
-    await redis.expire(cache_key, 3600)
-
-    return _evaluate(policy, autonomy_level)
+    return _evaluate(best_match, autonomy_level)

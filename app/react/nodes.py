@@ -20,10 +20,6 @@ from app.react.tools.memory.retrieve_similar_incidents import retrieve_similar_i
 from app.react.tools.memory.save_incident_memory import save_incident_memory
 from app.react.tools.notification.send_slack_notification import send_slack_notification
 
-from sqlalchemy import select
-from app.database import get_db_session
-from app.models.policies import Policy
-
 from app.utils.load_params import load_params
 
 params = load_params("app/params.yml")
@@ -37,29 +33,33 @@ async def memory_node(state: AegisOpsState) -> dict:
 
     incident = state["incident"]
 
-    # Episodic: retrieve similar past incidents via pgvector (Disabled for Portfolio Demo)
-    # similar = await retrieve_similar_incidents.ainvoke(
-    #     {"symptoms": incident["symptoms"]}
-    # )
-    similar = []
+    # Episodic: retrieve similar past incidents via pgvector
+    similar = await retrieve_similar_incidents.ainvoke(
+        {"symptoms": incident["symptoms"]}
+    )
 
-    # Procedural: load broad policies for this service
+    # Procedural: load broad policies from YAML for this service
     service = incident["service"]
-    async with get_db_session() as db:
-        stmt = select(Policy).where(
-            (Policy.service == service) | (Policy.service == "*")
-        )
-        rows = (await db.execute(stmt)).scalars().all()
+    severity = incident["severity"]
+    yaml_policies = params.get("retrieve_policy", {}).get("policies", [])
 
-    policies = [
-        f"[{p.action}] service={p.service} severity={p.severity} "
-        f"min_level={p.min_autonomy_level} approval={p.requires_approval} — {p.reason}"
-        for p in rows
-    ]
+    matched_policies = []
+    for p in yaml_policies:
+        # Match service (exact or wildcard)
+        if p.get("service") != service and p.get("service") != "*":
+            continue
+        # Match severity (exact or wildcard)
+        if p.get("severity") != severity and p.get("severity") != "*":
+            continue
+        
+        matched_policies.append(
+            f"[{p.get('action')}] service={p.get('service')} severity={p.get('severity')} "
+            f"min_level={p.get('min_autonomy_level')} approval={p.get('requires_approval')} — {p.get('reason')}"
+        )
 
     return {
         "similar_incidents": similar,
-        "procedural_policies": policies,
+        "procedural_policies": matched_policies,
         "incident_status": "investigating",
     }
 
@@ -103,7 +103,7 @@ async def resolution_node(state: AegisOpsState) -> dict:
     last_msg = state["messages"][-1]
     summary = getattr(last_msg, "content", "Incident resolved by AegisOps agent.")
 
-    # Persist to episodic memory for future RAG (Disabled for Portfolio Demo)
+    # Persist to episodic memory for future RAG
     diagnosis = state.get("diagnosis") or {
         "root_cause_hypothesis": summary,
         "confidence_score": 0.0,
@@ -111,14 +111,14 @@ async def resolution_node(state: AegisOpsState) -> dict:
         "recommended_actions": [],
     }
 
-    # await save_incident_memory.ainvoke({
-    #     "incident_id": incident["incident_id"],
-    #     "symptoms": incident["symptoms"],
-    #     "diagnosis": diagnosis,
-    #     "tool_invocations": state.get("tool_invocations", []),
-    #     "outcome": "resolved",
-    #     "mttr_seconds": mttr,
-    # })
+    await save_incident_memory.ainvoke({
+        "incident_id": incident["incident_id"],
+        "symptoms": incident["symptoms"],
+        "diagnosis": diagnosis,
+        "tool_invocations": state.get("tool_invocations", []),
+        "outcome": "resolved",
+        "mttr_seconds": mttr,
+    })
 
     # Slack notification
     await send_slack_notification.ainvoke({

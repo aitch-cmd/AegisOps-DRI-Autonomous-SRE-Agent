@@ -8,7 +8,40 @@ retrieve_similar_incidents:
     similarity_threshold: 0.70
 
 retrieve_policy:
-    level_rank: {"L0": 0, "L1": 1, "L2": 2, "L3": 3}  
+  level_rank:
+    L0: 0
+    L1: 1
+    L2: 2
+    L3: 3
+
+  policies:
+    - action: "restart_deployment"
+      service: "payment-service"
+      severity: "critical"
+      min_autonomy_level: "L2"
+      requires_approval: true
+      reason: "Critical service restart needs approval."
+
+    - action: "restart_deployment"
+      service: "*"
+      severity: "high"
+      min_autonomy_level: "L2"
+      requires_approval: false
+      reason: "High severity restart allowed."
+
+    - action: "scale_deployment" 
+      service: "*"
+      severity: "*"
+      min_autonomy_level: "L1"
+      requires_approval: false
+      reason: "Scaling is safe."
+
+    - action: "*"
+      service: "*"
+      severity: "*"
+      min_autonomy_level: "L3"
+      requires_approval: true
+      reason: "Fallback policy — requires max autonomy + approval."
 
 save_incident_memory:
     read_tools: ["retrieve_similar_incidents", "retrieve_runbook", "retrieve_policy"]
@@ -18,10 +51,9 @@ restart_deployment:
     rollout_poll_interval_s: 5
     rollout_timeout_s: 120
 
-scale_service:
+scale_deployment:
   max_scale_delta: 2
   max_absolute_replicas: 10
 
 agent:
   max_iterations: 10
-

@@ -62,17 +62,17 @@ async def seed_knowledge():
         {
             "category": "runbooks",
             "doc_name": "OOMKill_Triage.md",
-            "text": "Symptom: Pod restarts with OOMKill. Action: 1. Check memory limits. 2. Fetch logs for 'OutOfMemoryError'. 3. Scale service if traffic spike. 4. Restart if leak suspected."
+            "text": "Symptom: Pod restarts with OOMKill. Action: 1. Run get_pod_status to verify restart counts. 2. Fetch logs via get_logs for 'OutOfMemoryError'. 3. If traffic is high, use scale_deployment to add replicas. 4. If a recent change occurred, use update_deployment_image to rollback to a stable version."
         },
         {
             "category": "runbooks",
             "doc_name": "High_Latency_Triaging.md",
-            "text": "Symptom: P99 latency > 2s. Action: 1. Check DB slow logs (metrics). 2. Verify network connectivity. 3. Look for downstream timeout errors. 4. Scale instances if load high."
+            "text": "Symptom: P99 latency > 2s or High Error Rate. Action: 1. Use check_service_health to verify Prometheus metrics. 2. Use get_logs to look for timeout patterns. 3. Use scale_deployment to handle load spikes. 4. If pods are stuck, use restart_deployment to clear state."
         },
         {
             "category": "architecture",
             "doc_name": "Service_Topology.md",
-            "text": "Payment-service depends on Redis (caching) and Postgres (orders). User-service depends on Auth-service via internal OIDC."
+            "text": "The test-app (Nginx) is the primary entry point in the Kind cluster. It uses standard labels 'app=test-app' for discovery by the AegisOps tools."
         }
     ]
     
@@ -93,17 +93,17 @@ async def seed_incidents():
     incidents = [
         {
             "incident_id": "INC-ALPHA",
-            "symptoms": ["High CPU", "Payment timeouts"],
-            "root_cause": "Debug logging enabled in production.",
-            "actions_taken": ["toggle_feature_flag", "check_service_health"],
+            "symptoms": ["High Error Rate", "Service timeouts"],
+            "root_cause": "Traffic spike overwhelmed pod capacity.",
+            "actions_taken": ["get_pod_status", "scale_deployment", "check_service_health"],
             "outcome": "Resolved",
             "mttr_seconds": 300
         },
         {
             "incident_id": "INC-BETA",
-            "symptoms": ["Internal Server Error", "Auth failures"],
-            "root_cause": "Auth-service deployment failure (stuck pods).",
-            "actions_taken": ["restart_deployment", "verify_rollout_status"],
+            "symptoms": ["Internal Server Error", "Process hang"],
+            "root_cause": "Application deadlock in worker thread.",
+            "actions_taken": ["get_logs", "restart_deployment", "check_service_health"],
             "outcome": "Resolved",
             "mttr_seconds": 600
         }

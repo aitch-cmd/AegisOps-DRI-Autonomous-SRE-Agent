@@ -1,27 +1,20 @@
 import time
 import re
-import subprocess
 import pathlib
 from typing import Any, Dict, List, Optional
 from collections import Counter
 
 from langchain_core.tools import tool
-
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
 def normalize_message(msg: str) -> str:
-    """
-    Normalize log message to extract signature:
-    - remove numbers, UUIDs, IPs
-    - strip extra spaces
-    """
     msg = msg.lower()
-    msg = re.sub(r'\b\d+\b', '', msg)  # remove numbers
-    msg = re.sub(r'[0-9a-fA-F-]{36}', '', msg)  # remove UUIDs
-    msg = re.sub(r'\d+\.\d+\.\d+\.\d+', '', msg)  # remove IPs
+    msg = re.sub(r'\b\d+\b', '', msg)
+    msg = re.sub(r'[0-9a-fA-F-]{36}', '', msg)
+    msg = re.sub(r'\d+\.\d+\.\d+\.\d+', '', msg)
     msg = re.sub(r'\s+', ' ', msg)
     return msg.strip()
 
@@ -29,62 +22,59 @@ def normalize_message(msg: str) -> str:
 @tool
 def get_logs(
     service_name: str,
-    lookback_minutes: int = 10,
+    lookback_minutes: int = 10,   # (kept for compatibility, not used unless timestamps exist)
     top_k: int = 5,
     log_level: Optional[str] = "error",
 ) -> Dict[str, Any]:
     """
-    Fetch logs from journalctl or plain log files and return top error patterns.
-    Tries journalctl first (systemd hosts), then falls back to
-    /var/log/<service>/<service>.log for containerised or file-based setups.
+    Fetch logs from local ./logs directory and return top error patterns.
+    Expected structure:
+        logs/
+            service_name.log
     """
 
-    lines: List[str] = []
-    source = "none"
-
-    # ── Strategy 1: journalctl (systemd) ──────────────────────────────────
-    try:
-        cmd = [
-            "journalctl", "-u", service_name,
-            "--since", f"{lookback_minutes} min ago",
-            "--no-pager", "-q",
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode == 0 and result.stdout.strip():
-            lines = result.stdout.strip().splitlines()
-            source = "journalctl"
-            logger.info("Fetched %d lines via journalctl for %s", len(lines), service_name)
-    except FileNotFoundError:
-        logger.info("journalctl not available, falling back to log file")
-    except subprocess.TimeoutExpired:
-        logger.warning("journalctl timed out for %s", service_name)
-
-    # ── Strategy 2: Plain log file ────────────────────────────────────────
-    if not lines:
-        log_file = pathlib.Path(f"/var/log/{service_name}/{service_name}.log")
-        if log_file.exists():
-            lines = log_file.read_text().splitlines()[-500:]
-            source = "logfile"
-            logger.info("Fetched %d lines from %s", len(lines), log_file)
-        else:
-            logger.warning("No log source found for %s", service_name)
-            return {
-                "top_errors": [],
-                "total_error_lines": 0,
-                "query_duration_ms": 0,
-                "errors": [f"No log source available for '{service_name}'. "
-                           "Tried journalctl and /var/log/."],
-            }
-
-    # ── Filter by level ───────────────────────────────────────────────────
     query_start = time.monotonic()
+    lines: List[str] = []
+    source = "logs_folder"
 
+    # ── Read from local logs folder ───────────────────────────────
+    log_file = pathlib.Path("logs") / f"{service_name}.log"
+
+    if not log_file.exists():
+        logger.warning("Log file not found: %s", log_file)
+        return {
+            "top_errors": [],
+            "total_error_lines": 0,
+            "query_duration_ms": 0,
+            "source": source,
+            "errors": [f"Log file not found: {log_file}"],
+        }
+
+    try:
+        # Read last N lines (avoid loading huge file)
+        lines = log_file.read_text().splitlines()[-500:]
+        logger.info("Fetched %d lines from %s", len(lines), log_file)
+    except Exception as e:
+        return {
+            "top_errors": [],
+            "total_error_lines": 0,
+            "query_duration_ms": 0,
+            "source": source,
+            "errors": [f"Failed to read log file: {str(e)}"],
+        }
+
+    # ── Filter by log level ───────────────────────────────────────
     if log_level:
         lines = [l for l in lines if log_level.upper() in l.upper()]
 
-    # ── Normalize and count top patterns ──────────────────────────────────
-    messages = [normalize_message(l) for l in lines if normalize_message(l)]
-    counter = Counter(messages)
+    # ── Normalize + count ─────────────────────────────────────────
+    normalized = []
+    for l in lines:
+        nm = normalize_message(l)
+        if nm:
+            normalized.append(nm)
+
+    counter = Counter(normalized)
     most_common = counter.most_common(top_k)
 
     top_errors = [
@@ -96,7 +86,7 @@ def get_logs(
 
     return {
         "top_errors": top_errors,
-        "total_error_lines": len(messages),
+        "total_error_lines": len(normalized),
         "query_duration_ms": round(query_duration_ms, 2),
         "source": source,
         "errors": [],

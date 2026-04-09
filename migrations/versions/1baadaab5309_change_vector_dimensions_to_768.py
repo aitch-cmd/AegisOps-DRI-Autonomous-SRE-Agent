@@ -56,13 +56,16 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_policies_action'), 'policies', ['action'], unique=False)
-    op.drop_index(op.f('checkpoint_blobs_thread_id_idx'), table_name='checkpoint_blobs')
-    op.drop_table('checkpoint_blobs')
-    op.drop_index(op.f('checkpoint_writes_thread_id_idx'), table_name='checkpoint_writes')
-    op.drop_table('checkpoint_writes')
-    op.drop_index(op.f('checkpoints_thread_id_idx'), table_name='checkpoints')
-    op.drop_table('checkpoints')
-    op.drop_table('checkpoint_migrations')
+    
+    # Safely drop old checkpoint tables only if they exist
+    # These are often pre-created by LangGraph or left over from old versions
+    op.execute('DROP INDEX IF EXISTS checkpoint_blobs_thread_id_idx')
+    op.execute('DROP TABLE IF EXISTS checkpoint_blobs')
+    op.execute('DROP INDEX IF EXISTS checkpoint_writes_thread_id_idx')
+    op.execute('DROP TABLE IF EXISTS checkpoint_writes')
+    op.execute('DROP INDEX IF EXISTS checkpoints_thread_id_idx')
+    op.execute('DROP TABLE IF EXISTS checkpoints')
+    op.execute('DROP TABLE IF EXISTS checkpoint_migrations')
     # ### end Alembic commands ###
 
 
