@@ -32,6 +32,30 @@ def _default_deny(action: str, autonomy_level: str) -> PolicyDecision:
     )
 
 
+def match_policies(service: str, severity: str, action: Optional[str] = None) -> list[dict]:
+    """Find all policies matching service, severity, and optionally action."""
+    matches = []
+    for p in _POLICIES:
+        p_act = p.get("action")
+        p_srv = p.get("service")
+        p_sev = p.get("severity")
+
+        # Action must match exactly or be wildcard (if action provided)
+        if action and p_act != action and p_act != "*":
+            continue
+
+        # Service must match exactly or be wildcard
+        if p_srv != service and p_srv != "*":
+            continue
+
+        # Severity must match exactly or be wildcard
+        if p_sev != severity and p_sev != "*":
+            continue
+        
+        matches.append(p)
+    return matches
+
+
 @tool
 async def retrieve_policy(
     action: str,
@@ -53,37 +77,23 @@ async def retrieve_policy(
     Returns:
         PolicyDecision with allowed, reason, autonomy_level, requires_approval.
     """
+    matches = match_policies(service, severity, action)
+    
+    if not matches:
+        return _default_deny(action, autonomy_level)
+
+    # Specific matches are better than wildcards
     best_match = None
     best_score = -1
 
-    for p in _POLICIES:
-        p_act = p.get("action")
-        p_srv = p.get("service")
-        p_sev = p.get("severity")
-
-        # Action must match exactly or be wildcard
-        if p_act != action and p_act != "*":
-            continue
-
-        # Service must match exactly or be wildcard
-        if p_srv != service and p_srv != "*":
-            continue
-
-        # Severity must match exactly or be wildcard
-        if p_sev != severity and p_sev != "*":
-            continue
-
-        # Calculate score: specific matches are better than wildcards
+    for p in matches:
         score = 0
-        if p_act == action: score += 4
-        if p_srv == service: score += 2
-        if p_sev == severity: score += 1
+        if p.get("action") == action: score += 4
+        if p.get("service") == service: score += 2
+        if p.get("severity") == severity: score += 1
 
         if score > best_score:
             best_score = score
             best_match = p
-
-    if best_match is None:
-        return _default_deny(action, autonomy_level)
 
     return _evaluate(best_match, autonomy_level)

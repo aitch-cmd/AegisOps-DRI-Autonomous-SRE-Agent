@@ -24,6 +24,7 @@ from app.react.tools.notification.send_slack_notification import send_slack_noti
 
 # NOTE: save_incident_memory       → called in resolution_node (not a mid-reasoning tool)
 from app.react.tools.memory.retrieve_similar_incidents import retrieve_similar_incidents
+from app.react.tools.memory.retrieve_policy import retrieve_policy
 
 
 ALL_TOOLS = [
@@ -46,4 +47,7 @@ ALL_TOOLS = [
     # Notification
     write_audit_log,
     send_slack_notification,
+    
+    # Policy
+    retrieve_policy,
 ]

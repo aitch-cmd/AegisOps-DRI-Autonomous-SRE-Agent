@@ -19,6 +19,7 @@ from app.react.tools import ALL_TOOLS
 from app.react.tools.memory.retrieve_similar_incidents import retrieve_similar_incidents
 from app.react.tools.memory.save_incident_memory import save_incident_memory
 from app.react.tools.notification.send_slack_notification import send_slack_notification_func
+from app.react.tools.memory.retrieve_policy import match_policies
 
 from app.utils.load_params import load_params
 
@@ -38,24 +39,13 @@ async def memory_node(state: AegisOpsState) -> dict:
         {"symptoms": incident["symptoms"]}
     )
 
-    # Procedural: load broad policies from YAML for this service
-    service = incident["service"]
-    severity = incident["severity"]
-    yaml_policies = params.get("retrieve_policy", {}).get("policies", [])
-
-    matched_policies = []
-    for p in yaml_policies:
-        # Match service (exact or wildcard)
-        if p.get("service") != service and p.get("service") != "*":
-            continue
-        # Match severity (exact or wildcard)
-        if p.get("severity") != severity and p.get("severity") != "*":
-            continue
-        
-        matched_policies.append(
-            f"[{p.get('action')}] service={p.get('service')} severity={p.get('severity')} "
-            f"min_level={p.get('min_autonomy_level')} approval={p.get('requires_approval')} — {p.get('reason')}"
-        )
+    # Procedural: load matching policies from params.yml for context
+    matches = match_policies(incident["service"], incident["severity"])
+    matched_policies = [
+        f"[{p.get('action')}] service={p.get('service')} severity={p.get('severity')} "
+        f"min_level={p.get('min_autonomy_level')} approval={p.get('requires_approval')} — {p.get('reason')}"
+        for p in matches
+    ]
 
     return {
         "similar_incidents": similar,

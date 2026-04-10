@@ -108,36 +108,27 @@ async def run_agent(incident: IncidentEvent) -> dict:
                 f"Please diagnose and resolve this incident."
             ))
         ],
+    initial_state = {
+        "messages": [
+            HumanMessage(content=(
+                f"New incident alert:\n"
+                f"ID: {incident['incident_id']}\n"
+                f"Service: {incident['service']}\n"
+                f"Severity: {incident['severity']}\n"
+                f"Symptoms: {', '.join(incident['symptoms'])}\n"
+                f"Please diagnose and resolve this incident."
+            ))
+        ],
         "incident": incident,
-        "incident_status": "investigating",
-        "similar_incidents": [],
-        "runbook_context": [],
-        "procedural_policies": [],
-        "current_thought": "",
         "iteration": 0,
-        "diagnosis": None,
-        "pending_action": None,
-        "policy_decision": None,
-        "approval_status": None,
-        "tool_invocations": [],
-        "expected_outcome": None,
-        "health_check": None,
-        "verification_passed": None,
         "retry_count": 0,
-        "resolution_summary": None,
-        "mttr_seconds": None,
-        "slack_notified": False,
         "autonomy_level": incident.get("autonomy_level", "L2"),
         "user_id": incident.get("user_id", "system"),
         "session_id": incident.get("session_id", incident["incident_id"]),
-        "error": None,
     }
 
-    # Format SQLAlchemy async URL driver to psycopg standard driver for langgraph-checkpoint-postgres
-    # e.g. postgresql+asyncpg://... -> postgresql://...
-    db_uri = settings.DATABASE_URL
-    if db_uri.startswith("postgresql+asyncpg://"):
-        db_uri = db_uri.replace("postgresql+asyncpg://", "postgresql://", 1)
+    # Use standard PostgreSQL URL for LangGraph checkpointer
+    db_uri = settings.checkpointer_url
         
     async with AsyncPostgresSaver.from_conn_string(db_uri) as checkpointer:
         # Compile graph dynamically with the active checkpointer

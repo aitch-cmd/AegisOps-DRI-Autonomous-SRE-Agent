@@ -22,9 +22,7 @@ from app.core.settings import settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Setup database schema for checkpointer if it doesn't exist
-    db_uri = settings.DATABASE_URL
-    if db_uri.startswith("postgresql+asyncpg://"):
-        db_uri = db_uri.replace("postgresql+asyncpg://", "postgresql://", 1)
+    db_uri = settings.checkpointer_url
         
     async with AsyncPostgresSaver.from_conn_string(db_uri) as checkpointer:
         print("Setting up checkpointer schema in Postgres...")
