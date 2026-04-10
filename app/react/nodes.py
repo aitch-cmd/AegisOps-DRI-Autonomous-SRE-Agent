@@ -18,7 +18,7 @@ from app.react.states import AegisOpsState
 from app.react.tools import ALL_TOOLS
 from app.react.tools.memory.retrieve_similar_incidents import retrieve_similar_incidents
 from app.react.tools.memory.save_incident_memory import save_incident_memory
-from app.react.tools.notification.send_slack_notification import send_slack_notification
+from app.react.tools.notification.send_slack_notification import send_slack_notification_func
 
 from app.utils.load_params import load_params
 
@@ -79,6 +79,13 @@ async def agent_node(state: AegisOpsState) -> dict:
     messages = [system_msg] + state["messages"]
 
     response = await _llm_with_tools.ainvoke(messages)
+    
+    # --- LOGGING ---
+    if response.content:
+        print(f"\n[THOUGHT] {response.content}")
+    for tool_call in response.tool_calls:
+        print(f"[ACTION] Calling tool: {tool_call['name']} with {tool_call['args']}")
+    # --------------------
 
     iteration = state.get("iteration", 0) + 1
 
@@ -92,50 +99,59 @@ async def agent_node(state: AegisOpsState) -> dict:
 
 async def resolution_node(state: AegisOpsState) -> dict:
     """Persist resolved incident to pgvector and notify via Slack."""
+    try:
+        incident = state["incident"]
 
-    incident = state["incident"]
+        # Calculate MTTR
+        received_at = datetime.fromisoformat(incident["received_at"])
+        mttr = int((datetime.now(timezone.utc) - received_at).total_seconds())
 
-    # Calculate MTTR
-    received_at = datetime.fromisoformat(incident["received_at"])
-    mttr = int((datetime.now(timezone.utc) - received_at).total_seconds())
+        # Extract resolution summary from last AI message
+        last_msg = state["messages"][-1]
+        summary = getattr(last_msg, "content", "Incident resolved by AegisOps agent.")
 
-    # Extract resolution summary from last AI message
-    last_msg = state["messages"][-1]
-    summary = getattr(last_msg, "content", "Incident resolved by AegisOps agent.")
+        # Persist to episodic memory
+        print(f"[MEMORY] Saving incident {incident['incident_id']} to episodic memory...")
+        await save_incident_memory.ainvoke({
+            "incident_id": incident["incident_id"],
+            "symptoms": incident["symptoms"],
+            "diagnosis": {
+                "root_cause_hypothesis": summary,
+                "confidence_score": 1.0,
+                "supporting_evidence": [],
+                "recommended_actions": [],
+            },
+            "tool_invocations": state.get("tool_invocations", []),
+            "outcome": "resolved",
+            "mttr_seconds": mttr,
+        })
 
-    # Persist to episodic memory for future RAG
-    diagnosis = state.get("diagnosis") or {
-        "root_cause_hypothesis": summary,
-        "confidence_score": 0.0,
-        "supporting_evidence": [],
-        "recommended_actions": [],
-    }
+        # Slack notification
+        channel = params.get("slack", {}).get("default_channel", "#all-aegisops")
+        print(f"[NOTIFY] Sending resolution to Slack channel: {channel}")
 
-    await save_incident_memory.ainvoke({
-        "incident_id": incident["incident_id"],
-        "symptoms": incident["symptoms"],
-        "diagnosis": diagnosis,
-        "tool_invocations": state.get("tool_invocations", []),
-        "outcome": "resolved",
-        "mttr_seconds": mttr,
-    })
+        # Call the tool function directly for maximum reliability
+        result = await send_slack_notification_func(
+            channel=channel,
+            message=(
+                f"✅ *Incident Resolved*\n"
+                f"*ID:* `{incident['incident_id']}`\n"
+                f"*Service:* `{incident['service']}`\n"
+                f"*MTTR:* {mttr}s\n"
+                f"*Summary:* {summary[:500]}"
+            ),
+            severity=incident["severity"],
+        )
+        
+        if not result.get("success"):
+            print(f"[SLACK ERROR] Final resolution delivery failed: {result.get('error')}")
 
-    # Slack notification
-    await send_slack_notification.ainvoke({
-        "channel": "#notification",
-        "message": (
-            f"✅ *Incident Resolved*\n"
-            f"*ID:* `{incident['incident_id']}`\n"
-            f"*Service:* `{incident['service']}`\n"
-            f"*MTTR:* {mttr}s\n"
-            f"*Summary:* {summary[:500]}"
-        ),
-        "severity": incident["severity"],
-    })
-
-    return {
-        "incident_status": "resolved",
-        "resolution_summary": summary,
-        "mttr_seconds": mttr,
-        "slack_notified": True,
-    }
+        return {
+            "incident_status": "resolved",
+            "resolution_summary": summary,
+            "mttr_seconds": mttr,
+            "slack_notified": result.get("success", False),
+        }
+    except Exception as e:
+        print(f"[CRITICAL ERROR] in resolution_node: {e}")
+        return {"incident_status": "error", "error": str(e)}

@@ -1,6 +1,12 @@
+import os
 from datetime import datetime, timezone
-import uuid
 from typing import List, Literal, Optional, Any
+import uuid
+
+from dotenv import load_dotenv
+
+# Load environment variables before importing app modules
+load_dotenv()
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel

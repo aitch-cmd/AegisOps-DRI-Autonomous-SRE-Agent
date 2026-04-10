@@ -60,7 +60,7 @@ async def save_incident_memory(
         "outcome":       outcome,
         "mttr_seconds":  mttr_seconds,
         "embedding":     embedding,
-        "created_at":    datetime.now(timezone.utc),
+        "created_at":    datetime.now(timezone.utc).replace(tzinfo=None),
     }
 
     stmt = (
