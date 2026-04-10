@@ -108,17 +108,6 @@ async def run_agent(incident: IncidentEvent) -> dict:
                 f"Please diagnose and resolve this incident."
             ))
         ],
-    initial_state = {
-        "messages": [
-            HumanMessage(content=(
-                f"New incident alert:\n"
-                f"ID: {incident['incident_id']}\n"
-                f"Service: {incident['service']}\n"
-                f"Severity: {incident['severity']}\n"
-                f"Symptoms: {', '.join(incident['symptoms'])}\n"
-                f"Please diagnose and resolve this incident."
-            ))
-        ],
         "incident": incident,
         "iteration": 0,
         "retry_count": 0,
